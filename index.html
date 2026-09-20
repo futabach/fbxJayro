@@ -76,6 +76,16 @@
         </div>
     </header>
 
+    <!-- スマホ用 移動UIボタン -->
+    <div id="mobile-controls" class="absolute bottom-28 left-1/2 -translate-x-1/2 flex gap-4 z-20 pointer-events-auto">
+        <button id="btn-move-forward" class="glass-panel px-6 py-3 rounded-full hover:bg-slate-800/80 active:scale-95 transition text-slate-200 font-bold flex items-center gap-2 shadow-lg">
+            <i class="fa-solid fa-arrow-up"></i> 進む
+        </button>
+        <button id="btn-move-backward" class="glass-panel px-6 py-3 rounded-full hover:bg-slate-800/80 active:scale-95 transition text-slate-200 font-bold flex items-center gap-2 shadow-lg">
+            <i class="fa-solid fa-arrow-down"></i> 戻る
+        </button>
+    </div>
+
     <div id="settings-panel" class="absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-lg glass-panel rounded-3xl p-5 shadow-2xl z-20 transition-all duration-300 transform translate-y-0 opacity-100">
         
         <!-- Navigation Tabs / Quick Mode Selector -->
@@ -168,6 +178,15 @@
         let gyroPermissionGranted = false;
         let deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
         let initialOrientation = null;
+
+        // 移動制御用の状態管理変数
+        const moveState = {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false
+        };
+        const moveSpeed = 0.1; // 移動速度
         
         // Smooth camera rotation target
         const targetQuaternion = new THREE.Quaternion();
@@ -228,6 +247,9 @@
             // Default fallback object
             createDefaultModel();
 
+            // Setup movement controls
+            setupMovementControls();
+
             // Resize handling
             window.addEventListener('resize', onWindowResize);
         }
@@ -264,6 +286,67 @@
             orbitControls.target.set(0, 1.2, 0);
             camera.position.set(0, 2.5, 5);
             orbitControls.update();
+        }
+
+        // 移動イベント（キーボード＆スマホUI）の設定
+        function setupMovementControls() {
+            // WASD キーボード入力設定
+            window.addEventListener('keydown', (e) => {
+                switch (e.code) {
+                    case 'KeyW': moveState.forward = true; break;
+                    case 'KeyS': moveState.backward = true; break;
+                    case 'KeyA': moveState.left = true; break;
+                    case 'KeyD': moveState.right = true; break;
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                switch (e.code) {
+                    case 'KeyW': moveState.forward = false; break;
+                    case 'KeyS': moveState.backward = false; break;
+                    case 'KeyA': moveState.left = false; break;
+                    case 'KeyD': moveState.right = false; break;
+                }
+            });
+
+            // スマホ用「進む/戻る」ボタンのイベントバインド
+            const btnForward = document.getElementById('btn-move-forward');
+            const btnBackward = document.getElementById('btn-move-backward');
+
+            const bindMoveButton = (btn, direction) => {
+                const start = (e) => { e.preventDefault(); moveState[direction] = true; };
+                const end = (e) => { e.preventDefault(); moveState[direction] = false; };
+
+                btn.addEventListener('touchstart', start, { passive: false });
+                btn.addEventListener('touchend', end, { passive: false });
+                btn.addEventListener('mousedown', start);
+                btn.addEventListener('mouseup', end);
+                btn.addEventListener('mouseleave', end);
+            };
+
+            bindMoveButton(btnForward, 'forward');
+            bindMoveButton(btnBackward, 'backward');
+        }
+
+        // カメラ視点方向に基づいた移動計算処理
+        function updateCameraMovement() {
+            const frontVector = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            const sideVector = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+
+            const moveVector = new THREE.Vector3(0, 0, 0);
+
+            if (moveState.forward) moveVector.add(frontVector);
+            if (moveState.backward) moveVector.sub(frontVector);
+            if (moveState.right) moveVector.add(sideVector);
+            if (moveState.left) moveVector.sub(sideVector);
+
+            if (moveVector.lengthSq() > 0) {
+                moveVector.normalize().multiplyScalar(moveSpeed);
+                camera.position.add(moveVector);
+                if (orbitControls) {
+                    orbitControls.target.add(moveVector);
+                }
+            }
         }
 
         document.getElementById('input-fbx').addEventListener('change', function(e) {
@@ -544,6 +627,9 @@
 
         function animate() {
             requestAnimationFrame(animate);
+
+            // 毎フレームカメラの移動状態を更新！
+            updateCameraMovement();
 
             if (gyroMode) {
                 // Smooth interpolation (slerp) to prevent gyro sensor jitter
