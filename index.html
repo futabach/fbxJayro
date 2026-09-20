@@ -3,534 +3,537 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3D FBX Viewer with FPS & Gyro Controls</title>
+    <title>3D FBX Viewer & Gyroscope Controller</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- fflate needed for FBXLoader -->
     <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.min.js"></script>
-    <!-- FBXLoader -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
-    <!-- DeviceOrientationControls -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/DeviceOrientationControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
-        body, html {
+        body {
             margin: 0;
             padding: 0;
-            width: 100%;
-            height: 100%;
             overflow: hidden;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: manipulation;
-        }
-
-        #canvas-container {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-
-        /* Glassmorphism panel style */
-        .glass-panel {
-            background: rgba(18, 24, 38, 0.75);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-        }
-
-        .touch-button {
+            background-color: #0f172a;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             touch-action: none;
-            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
         }
-
-        .touch-button:active {
-            transform: scale(0.95);
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
         }
-
-        /* Crosshair indicator */
-        .crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 10px;
-            height: 10px;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            z-index: 10;
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .crosshair::before, .crosshair::after {
-            content: '';
-            position: absolute;
-            background: rgba(255, 255, 255, 0.6);
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 4px;
         }
-        .crosshair::before {
-            top: 4px; left: 0; width: 10px; height: 2px;
-        }
-        .crosshair::after {
-            top: 0; left: 4px; width: 2px; height: 10px;
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white overflow-hidden">
+<body class="text-slate-100">
 
-    <div id="canvas-container"></div>
+    <div id="canvas-container" class="relative w-full h-full">
+        <!-- 3D Canvas will be injected here -->
+    </div>
 
-    <!-- Center Crosshair -->
-    <div id="crosshair" class="crosshair opacity-75"></div>
-
-    <!-- UI Overlay Layer -->
-    <div class="relative z-10 w-full h-full flex flex-col justify-between pointer-events-none p-4 md:p-6">
-        
-        <!-- Top Header Bar -->
-        <div class="flex flex-wrap justify-between items-center gap-3 pointer-events-auto">
-            <div class="glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-3 shadow-lg">
-                <i class="fa-solid fa-cube text-indigo-400 text-xl"></i>
-                <div>
-                    <h1 class="text-sm font-bold text-gray-100">FBX 3D FPS Viewer</h1>
-                    <p id="model-status" class="text-xs text-gray-400">モデル未読み込み</p>
-                </div>
+    <!-- Header / Top Bar Controls -->
+    <header class="absolute top-4 left-4 right-4 flex justify-between items-center pointer-events-none z-10">
+        <div class="glass-panel rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-lg pointer-events-auto">
+            <i class="fa-solid fa-cube text-indigo-400 text-xl"></i>
+            <div>
+                <h1 class="text-sm font-bold leading-tight">FBX & Gyro Viewer</h1>
+                <p id="status-text" class="text-[11px] text-slate-400">Default scene active</p>
             </div>
+        </div>
 
-            <!-- Action Buttons Panel -->
-            <div class="flex items-center gap-2">
-                <!-- Dropdown / Upload button -->
-                <label class="glass-panel hover:bg-gray-800/80 transition text-xs font-medium px-3.5 py-2.5 rounded-xl cursor-pointer flex items-center gap-2 shadow-lg active:scale-95">
-                    <i class="fa-solid fa-file-arrow-up text-indigo-400"></i>
-                    <span>FBXを選択</span>
-                    <input type="file" id="file-input" accept=".fbx" class="hidden" />
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <!-- Reset View Button -->
+            <button id="btn-reset" title="Reset View" class="glass-panel p-3 rounded-full hover:bg-slate-800/80 active:scale-95 transition text-slate-200">
+                <i class="fa-solid fa-arrows-to-dot text-base"></i>
+            </button>
+            <!-- Settings Toggle -->
+            <button id="btn-settings-toggle" title="Settings" class="glass-panel p-3 rounded-full hover:bg-slate-800/80 active:scale-95 transition text-slate-200">
+                <i class="fa-solid fa-sliders text-base"></i>
+            </button>
+            <!-- Fullscreen Toggle -->
+            <button id="btn-fullscreen" title="Fullscreen" class="glass-panel p-3 rounded-full hover:bg-slate-800/80 active:scale-95 transition text-slate-200">
+                <i class="fa-solid fa-expand text-base"></i>
+            </button>
+        </div>
+    </header>
+
+    <div id="settings-panel" class="absolute bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-lg glass-panel rounded-3xl p-5 shadow-2xl z-20 transition-all duration-300 transform translate-y-0 opacity-100">
+        
+        <!-- Navigation Tabs / Quick Mode Selector -->
+        <div class="flex bg-slate-900/60 p-1 rounded-2xl mb-4 border border-slate-700/50">
+            <button id="mode-touch-btn" class="flex-1 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 bg-indigo-600 text-white shadow">
+                <i class="fa-solid fa-hand-pointer"></i> Orbit / Touch
+            </button>
+            <button id="mode-gyro-btn" class="flex-1 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200">
+                <i class="fa-solid fa-mobile-screen-button"></i> Smartphone Gyro
+            </button>
+        </div>
+
+        <!-- File Upload Section -->
+        <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-2">
+                <!-- FBX File Button -->
+                <label class="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-slate-600 hover:border-indigo-400 bg-slate-800/40 hover:bg-slate-800/70 transition cursor-pointer text-center group">
+                    <i class="fa-solid fa-file-import text-indigo-400 group-hover:scale-110 transition mb-1 text-base"></i>
+                    <span class="text-xs font-medium text-slate-200">Load FBX Model</span>
+                    <span id="fbx-filename" class="text-[10px] text-slate-400 truncate w-full mt-0.5">No file chosen</span>
+                    <input type="file" id="input-fbx" accept=".fbx" class="hidden">
                 </label>
 
-                <!-- Gyro Enable Button (iOS/Android) -->
-                <button id="btn-gyro" class="glass-panel hover:bg-gray-800/80 transition text-xs font-medium px-3.5 py-2.5 rounded-xl flex items-center gap-2 shadow-lg active:scale-95">
-                    <i class="fa-solid fa-compass text-amber-400"></i>
-                    <span id="gyro-btn-text">ジャイロ有効化</span>
-                </button>
-
-                <!-- Reset View Button -->
-                <button id="btn-reset" class="glass-panel hover:bg-gray-800/80 transition text-xs font-medium px-3.5 py-2.5 rounded-xl flex items-center gap-2 shadow-lg active:scale-95">
-                    <i class="fa-solid fa-rotate-left text-emerald-400"></i>
-                    <span class="hidden sm:inline">リセット</span>
-                </button>
-            </div>
-        </div>
-
-        <div id="dropzone" class="absolute inset-x-4 top-20 bottom-24 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-96 glass-panel rounded-3xl border-2 border-dashed border-indigo-500/40 p-6 flex flex-col justify-center items-center text-center transition-all duration-300 pointer-events-auto shadow-2xl">
-            <div class="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center gap-2 justify-center mb-4 text-indigo-400 text-2xl">
-                <i class="fa-solid fa-cloud-arrow-up"></i>
-            </div>
-            <h2 class="text-base font-bold mb-1">FBXファイルをドラッグ＆ドロップ</h2>
-            <p class="text-xs text-gray-400 mb-4">またはボタンからファイルを選択してください（テクスチャ内蔵FBX対応）</p>
-            <label class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-5 py-2.5 rounded-xl cursor-pointer shadow-md hover:shadow-indigo-500/25 transition">
-                ファイルを選択
-                <input type="file" id="dropzone-file-input" accept=".fbx" class="hidden" />
-            </label>
-        </div>
-
-        <!-- Navigation Controls Container (Bottom) -->
-        <div class="flex justify-between items-end w-full gap-4 pointer-events-none">
-            
-            <!-- Instructions Legend (Desktop/Tablet) -->
-            <div class="glass-panel p-3 rounded-2xl hidden md:block text-xs text-gray-300 pointer-events-auto">
-                <div class="font-bold text-indigo-300 mb-1">操作方法:</div>
-                <ul class="space-y-0.5 text-[11px] text-gray-400">
-                    <li><span class="text-gray-200">W / S:</span> 前進 / 後退</li>
-                    <li><span class="text-gray-200">A / D:</span> 左右平行移動</li>
-                    <li><span class="text-gray-200">マウスドラッグ:</span> 視点回転</li>
-                    <li><span class="text-gray-200">スマホ:</span> ジャイロ + 画面ボタン前進/後退</li>
-                </ul>
+                <!-- Texture Files Button -->
+                <label class="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-slate-600 hover:border-emerald-400 bg-slate-800/40 hover:bg-slate-800/70 transition cursor-pointer text-center group">
+                    <i class="fa-solid fa-image text-emerald-400 group-hover:scale-110 transition mb-1 text-base"></i>
+                    <span class="text-xs font-medium text-slate-200">Load Textures</span>
+                    <span id="texture-filename" class="text-[10px] text-slate-400 truncate w-full mt-0.5">Multiple allowed</span>
+                    <input type="file" id="input-textures" accept="image/*" multiple class="hidden">
+                </label>
             </div>
 
-            <!-- Mobile Movement Buttons (Always visible on bottom center/right) -->
-            <div class="flex gap-3 mx-auto md:mx-0 pointer-events-auto">
-                <button id="btn-move-forward" class="touch-button glass-panel bg-indigo-600/60 active:bg-indigo-600 border-indigo-400/40 w-20 h-20 sm:w-24 sm:h-24 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-2xl border">
-                    <i class="fa-solid fa-chevron-up text-xl text-white"></i>
-                    <span class="text-xs font-bold text-white tracking-wider">進む</span>
+            <!-- Gyro Permission Request Alert Box (iOS Specific) -->
+            <div id="gyro-permission-box" class="hidden bg-amber-500/15 border border-amber-500/30 rounded-xl p-3 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 text-amber-300 text-xs">
+                    <i class="fa-solid fa-triangle-exclamation text-sm"></i>
+                    <span>Permission needed for motion sensors.</span>
+                </div>
+                <button id="btn-request-gyro" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition shadow">
+                    Enable
                 </button>
-                <button id="btn-move-backward" class="touch-button glass-panel bg-gray-800/80 active:bg-gray-700 border-gray-600/40 w-20 h-20 sm:w-24 sm:h-24 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-2xl border">
-                    <i class="fa-solid fa-chevron-down text-xl text-gray-200"></i>
-                    <span class="text-xs font-bold text-gray-200 tracking-wider">戻る</span>
-                </button>
+            </div>
+
+            <!-- Expandable Settings Accordion -->
+            <div class="pt-2 border-t border-slate-700/50 space-y-2">
+                <!-- Lighting Brightness -->
+                <div class="flex items-center justify-between gap-4">
+                    <span class="text-xs text-slate-300 font-medium flex items-center gap-1.5">
+                        <i class="fa-solid fa-sun text-slate-400"></i> Light Intensity
+                    </span>
+                    <input type="range" id="slider-light" min="0.2" max="3.0" step="0.1" value="1.2" class="w-28 accent-indigo-500">
+                </div>
+
+                <!-- Camera FOV -->
+                <div class="flex items-center justify-between gap-4">
+                    <span class="text-xs text-slate-300 font-medium flex items-center gap-1.5">
+                        <i class="fa-solid fa-camera text-slate-400"></i> FOV
+                    </span>
+                    <input type="range" id="slider-fov" min="30" max="110" step="1" value="65" class="w-28 accent-indigo-500">
+                </div>
+
+                <!-- Options Bar -->
+                <div class="flex justify-between items-center pt-1 text-xs text-slate-300">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="chk-autorotate" class="rounded accent-indigo-500">
+                        <span>Auto Rotate</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="chk-wireframe" class="rounded accent-indigo-500">
+                        <span>Wireframe</span>
+                    </label>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Loading Modal Indicator -->
-    <div id="loading-overlay" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex flex-col items-center justify-center pointer-events-auto">
-        <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <div id="loading-text" class="text-sm font-semibold text-white">FBXファイルを読み込み中...</div>
-        <div id="loading-progress" class="text-xs text-indigo-300 mt-1">0%</div>
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 glass-panel border border-indigo-500/30 text-indigo-200 text-xs px-4 py-2.5 rounded-full shadow-lg opacity-0 pointer-events-none transition-all duration-300 z-30 flex items-center gap-2">
+        <i class="fa-solid fa-circle-info"></i>
+        <span id="toast-message">Message</span>
     </div>
 
     <script>
-        // Global Three.js Scene Variables
-        let scene, camera, renderer, clock;
-        let deviceControls = null;
-        let currentModel = null;
+        let scene, camera, renderer, orbitControls;
+        let currentFBX = null;
+        const loadedTextures = new Map();
+        
+        // Gyroscope tracking state
+        let gyroMode = false;
+        let gyroPermissionGranted = false;
+        let deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
+        let initialOrientation = null;
+        
+        // Smooth camera rotation target
+        const targetQuaternion = new THREE.Quaternion();
+        const currentQuaternion = new THREE.Quaternion();
 
-        // Camera movement state
-        const moveState = {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false
-        };
-        const MOVE_SPEED = 12.0; // speed units per second
-
-        // Mouse look state (FPS Drag Rotation)
-        let isMouseDown = false;
-        let previousMousePosition = { x: 0, y: 0 };
-        let cameraEuler = new THREE.Euler(0, 0, 0, 'YXZ');
-        let isGyroActive = false;
-
-        // Setup DOM element references
-        const container = document.getElementById('canvas-container');
-        const fileInput = document.getElementById('file-input');
-        const dropzoneFileInput = document.getElementById('dropzone-file-input');
-        const dropzone = document.getElementById('dropzone');
-        const loadingOverlay = document.getElementById('loading-overlay');
-        const loadingText = document.getElementById('loading-text');
-        const loadingProgress = document.getElementById('loading-progress');
-        const modelStatus = document.getElementById('model-status');
-        const btnGyro = document.getElementById('btn-gyro');
-        const gyroBtnText = document.getElementById('gyro-btn-text');
-        const btnReset = document.getElementById('btn-reset');
+        // Scene lights reference
+        let ambientLight, dirLight;
 
         function initScene() {
+            const container = document.getElementById('canvas-container');
+
+            // Scene setup
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x111827); // Dark gray background
-            scene.fog = new THREE.FogExp2(0x111827, 0.008);
+            scene.background = new THREE.Color(0x0f172a);
+            scene.fog = new THREE.FogExp2(0x0f172a, 0.015);
 
-            // Camera initialization
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 5); // Average eye level height (1.6m)
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 5);
 
-            // Clock for delta time calculations
-            clock = new THREE.Clock();
-
-            // Renderer configuration
+            // Renderer setup
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.0;
             container.appendChild(renderer.domElement);
 
+            // OrbitControls
+            orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+            orbitControls.enableDamping = true;
+            orbitControls.dampingFactor = 0.05;
+            orbitControls.maxDistance = 100;
+            orbitControls.minDistance = 0.5;
+
             // Lighting setup
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
             scene.add(ambientLight);
 
-            const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            dirLight.position.set(20, 40, 20);
+            dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight.position.set(5, 12, 8);
             dirLight.castShadow = true;
-            dirLight.shadow.mapSize.width = 2048;
-            dirLight.shadow.mapSize.height = 2048;
-            dirLight.shadow.camera.near = 0.5;
-            dirLight.shadow.camera.far = 150;
-            const d = 25;
-            dirLight.shadow.camera.left = -d;
-            dirLight.shadow.camera.right = d;
-            dirLight.shadow.camera.top = d;
-            dirLight.shadow.camera.bottom = -d;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
             scene.add(dirLight);
 
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
-            hemiLight.position.set(0, 50, 0);
-            scene.add(hemiLight);
+            const fillLight = new THREE.DirectionalLight(0x818cf8, 0.4);
+            fillLight.position.set(-5, -2, -5);
+            scene.add(fillLight);
 
-            // Grid Floor
-            const gridHelper = new THREE.GridHelper(100, 100, 0x6366f1, 0x374151);
-            gridHelper.position.y = 0;
+            // Grid helper
+            const gridHelper = new THREE.GridHelper(30, 30, 0x334155, 0x1e293b);
+            gridHelper.position.y = -0.01;
             scene.add(gridHelper);
 
-            // Window resize handler
-            window.addEventListener('resize', onWindowResize, false);
+            // Default fallback object
+            createDefaultModel();
 
-            // Register Input & Touch Listeners
-            setupControls();
+            // Resize handling
+            window.addEventListener('resize', onWindowResize);
         }
 
-        function setupControls() {
-            // Mouse Drag look controls
-            const domEl = renderer.domElement;
+        function createDefaultModel() {
+            if (currentFBX) scene.remove(currentFBX);
 
-            domEl.addEventListener('mousedown', (e) => {
-                isMouseDown = true;
-                previousMousePosition = { x: e.clientX, y: e.clientY };
+            const group = new THREE.Group();
+
+            // Create stylized knot
+            const geometry = new THREE.TorusKnotGeometry(1, 0.35, 128, 32);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x6366f1,
+                roughness: 0.3,
+                metalness: 0.8,
             });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.position.y = 1.5;
+            group.add(mesh);
 
-            domEl.addEventListener('mousemove', (e) => {
-                if (!isMouseDown || isGyroActive) return;
+            // Pedestal
+            const baseGeo = new THREE.CylinderGeometry(1.8, 2, 0.4, 32);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 });
+            const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+            baseMesh.position.y = 0.2;
+            baseMesh.receiveShadow = true;
+            group.add(baseMesh);
 
-                const deltaX = e.clientX - previousMousePosition.x;
-                const deltaY = e.clientY - previousMousePosition.y;
+            currentFBX = group;
+            scene.add(currentFBX);
 
-                cameraEuler.setFromQuaternion(camera.quaternion);
-                cameraEuler.y -= deltaX * 0.003; // Yaw
-                cameraEuler.x -= deltaY * 0.003; // Pitch
-
-                // Clamp pitch angle to prevent flipping
-                cameraEuler.x = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, cameraEuler.x));
-
-                camera.quaternion.setFromEuler(cameraEuler);
-                previousMousePosition = { x: e.clientX, y: e.clientY };
-            });
-
-            window.addEventListener('mouseup', () => { isMouseDown = false; });
-
-            // Touch Drag look controls for mobile screen drag
-            let touchStartPos = { x: 0, y: 0 };
-            domEl.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 1) {
-                    touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                }
-            }, { passive: true });
-
-            domEl.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 1 && !isGyroActive) {
-                    const deltaX = e.touches[0].clientX - touchStartPos.x;
-                    const deltaY = e.touches[0].clientY - touchStartPos.y;
-
-                    cameraEuler.setFromQuaternion(camera.quaternion);
-                    cameraEuler.y -= deltaX * 0.004;
-                    cameraEuler.x -= deltaY * 0.004;
-                    cameraEuler.x = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, cameraEuler.x));
-
-                    camera.quaternion.setFromEuler(cameraEuler);
-                    touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                }
-            }, { passive: true });
-
-            // Keyboard navigation (WASD)
-            window.addEventListener('keydown', (e) => {
-                switch (e.code) {
-                    case 'KeyW': case 'ArrowUp': moveState.forward = true; break;
-                    case 'KeyS': case 'ArrowDown': moveState.backward = true; break;
-                    case 'KeyA': case 'ArrowLeft': moveState.left = true; break;
-                    case 'KeyD': case 'ArrowRight': moveState.right = true; break;
-                }
-            });
-
-            window.addEventListener('keyup', (e) => {
-                switch (e.code) {
-                    case 'KeyW': case 'ArrowUp': moveState.forward = false; break;
-                    case 'KeyS': case 'ArrowDown': moveState.backward = false; break;
-                    case 'KeyA': case 'ArrowLeft': moveState.left = false; break;
-                    case 'KeyD': case 'ArrowRight': moveState.right = false; break;
-                }
-            });
-
-            // On-screen Mobile Move Buttons
-            setupTouchButton('btn-move-forward', 'forward');
-            setupTouchButton('btn-move-backward', 'backward');
-
-            // Drag and drop event handling
-            window.addEventListener('dragover', (e) => e.preventDefault());
-            window.addEventListener('drop', (e) => {
-                e.preventDefault();
-                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                    const file = e.dataTransfer.files[0];
-                    if (file.name.toLowerCase().endsWith('.fbx')) {
-                        loadFBXFile(file);
-                    } else {
-                        alert('FBX形式のファイルを選択してください。');
-                    }
-                }
-            });
-
-            // File inputs
-            fileInput.addEventListener('change', (e) => {
-                if (e.target.files.length > 0) loadFBXFile(e.target.files[0]);
-            });
-            dropzoneFileInput.addEventListener('change', (e) => {
-                if (e.target.files.length > 0) loadFBXFile(e.target.files[0]);
-            });
-
-            // Reset camera button
-            btnReset.addEventListener('click', resetCameraView);
-
-            // Gyroscope permission and toggle handler
-            btnGyro.addEventListener('click', toggleGyroscope);
+            orbitControls.target.set(0, 1.2, 0);
+            camera.position.set(0, 2.5, 5);
+            orbitControls.update();
         }
 
-        // Helper to handle touch hold/release for forward and backward movement buttons
-        function setupTouchButton(buttonId, stateKey) {
-            const btn = document.getElementById(buttonId);
-            const startMove = (e) => {
-                e.preventDefault();
-                moveState[stateKey] = true;
-            };
-            const stopMove = (e) => {
-                e.preventDefault();
-                moveState[stateKey] = false;
-            };
+        document.getElementById('input-fbx').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
 
-            btn.addEventListener('mousedown', startMove);
-            btn.addEventListener('mouseup', stopMove);
-            btn.addEventListener('mouseleave', stopMove);
-            btn.addEventListener('touchstart', startMove, { passive: false });
-            btn.addEventListener('touchend', stopMove, { passive: false });
-            btn.addEventListener('touchcancel', stopMove, { passive: false });
-        }
-
-        function toggleGyroscope() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                // iOS 13+ device permission request
-                DeviceOrientationEvent.requestPermission()
-                    .then(response => {
-                        if (response === 'granted') {
-                            activateDeviceControls();
-                        } else {
-                            alert('ジャイロセンサーへのアクセスが拒否されました。');
-                        }
-                    })
-                    .catch(err => {
-                        console.error('DeviceOrientation error:', err);
-                        alert('ジャイロセンサーを有効化できませんでした。');
-                    });
-            } else {
-                // Standard non-iOS or desktop fallback
-                if (!isGyroActive) {
-                    activateDeviceControls();
-                } else {
-                    deactivateDeviceControls();
-                }
-            }
-        }
-
-        function activateDeviceControls() {
-            if (!deviceControls) {
-                deviceControls = new THREE.DeviceOrientationControls(camera);
-            }
-            deviceControls.enabled = true;
-            isGyroActive = true;
-            gyroBtnText.textContent = "ジャイロON";
-            btnGyro.classList.add('bg-amber-500/30', 'border-amber-400');
-        }
-
-        function deactivateDeviceControls() {
-            if (deviceControls) {
-                deviceControls.enabled = false;
-            }
-            isGyroActive = false;
-            gyroBtnText.textContent = "ジャイロ有効化";
-            btnGyro.classList.remove('bg-amber-500/30', 'border-amber-400');
-        }
-
-        function loadFBXFile(file) {
-            showLoading(true, file.name);
+            document.getElementById('fbx-filename').innerText = file.name;
+            showToast('Loading FBX model...');
 
             const reader = new FileReader();
-            reader.readAsArrayBuffer(file);
-            reader.onload = function (e) {
-                const contents = e.target.result;
+            reader.onload = function(event) {
+                const contents = event.target.result;
                 const loader = new THREE.FBXLoader();
-
+                
                 try {
                     const object = loader.parse(contents, '');
                     
-                    // Remove existing model if any
-                    if (currentModel) {
-                        scene.remove(currentModel);
-                    }
+                    if (currentFBX) scene.remove(currentFBX);
+                    currentFBX = object;
 
-                    currentModel = object;
+                    // Compute bounding box to frame model correctly
+                    const box = new THREE.Box3().setFromObject(object);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
 
-                    // Traverse model meshes to enable shadows & handle embedded textures/materials
-                    currentModel.traverse((child) => {
+                    // Normalize position to origin
+                    object.position.x += (object.position.x - center.x);
+                    object.position.y += (object.position.y - center.y) + (size.y / 2);
+                    object.position.z += (object.position.z - center.z);
+
+                    // Enable shadows & apply textures if already uploaded
+                    object.traverse((child) => {
                         if (child.isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
-
-                            // Fallback material handling if texture/material is missing
-                            if (!child.material) {
-                                child.material = new THREE.MeshStandardMaterial({
-                                    color: 0xa0a0a0,
-                                    roughness: 0.6,
-                                    metalness: 0.2
-                                });
-                            } else if (Array.isArray(child.material)) {
-                                child.material.forEach(mat => {
-                                    mat.side = THREE.DoubleSide;
-                                });
-                            } else {
-                                child.material.side = THREE.DoubleSide;
-                            }
+                            applyStoredTexturesToMaterial(child);
                         }
                     });
 
-                    scene.add(currentModel);
+                    scene.add(object);
 
-                    // Auto-adjust camera position and scale
-                    fitCameraToModel(currentModel);
+                    // Adjust camera distance based on object size
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const fov = camera.fov * (Math.PI / 180);
+                    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 2.2;
+                    cameraZ = Math.max(cameraZ, 2);
 
-                    // Update UI State
-                    modelStatus.textContent = file.name;
-                    dropzone.classList.add('hidden');
-                    showLoading(false);
+                    camera.position.set(0, size.y / 2 + 1, cameraZ);
+                    orbitControls.target.set(0, size.y / 2, 0);
+                    orbitControls.update();
 
+                    document.getElementById('status-text').innerText = `Loaded: ${file.name}`;
+                    showToast('FBX Model loaded successfully!');
                 } catch (error) {
-                    console.error('FBX parse error:', error);
-                    alert('FBXファイルの読み込みに失敗しました。ファイルが破損している可能性があります。');
-                    showLoading(false);
+                    console.error("Error parsing FBX:", error);
+                    showToast('Failed to parse FBX file');
                 }
             };
+            reader.readAsArrayBuffer(file);
+        });
 
-            reader.onprogress = function (e) {
-                if (e.lengthComputable) {
-                    const percent = Math.round((e.loaded / e.total) * 100);
-                    loadingProgress.textContent = percent + '%';
-                }
-            };
+        // Texture Batch Upload Handler
+        document.getElementById('input-textures').addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+
+            document.getElementById('texture-filename').innerText = `${files.length} texture(s) selected`;
+            let loadedCount = 0;
+
+            Array.from(files).forEach(file => {
+                const url = URL.createObjectURL(file);
+                const textureLoader = new THREE.TextureLoader();
+                
+                textureLoader.load(url, (texture) => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    
+                    // Store texture with clean name key
+                    const cleanName = file.name.toLowerCase();
+                    loadedTextures.set(cleanName, texture);
+                    loadedCount++;
+
+                    // Re-apply to existing meshes
+                    if (currentFBX) {
+                        currentFBX.traverse((child) => {
+                            if (child.isMesh) {
+                                applyStoredTexturesToMaterial(child);
+                            }
+                        });
+                    }
+
+                    if (loadedCount === files.length) {
+                        showToast(`Applied ${loadedCount} texture(s)`);
+                    }
+                });
+            });
+        });
+
+        function applyStoredTexturesToMaterial(mesh) {
+            if (!mesh.material) return;
+
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+
+            materials.forEach((mat) => {
+                loadedTextures.forEach((texture, name) => {
+                    // Simple heuristic matching based on texture filenames
+                    if (name.includes('diffuse') || name.includes('albedo') || name.includes('color') || name.includes('base')) {
+                        mat.map = texture;
+                    } else if (name.includes('normal') || name.includes('nor')) {
+                        mat.normalMap = texture;
+                    } else if (name.includes('roughness') || name.includes('rough')) {
+                        mat.roughnessMap = texture;
+                    } else if (name.includes('metallic') || name.includes('metal')) {
+                        mat.metalnessMap = texture;
+                    } else {
+                        // Fallback: apply as main diffuse map if no other map exists
+                        if (!mat.map) mat.map = texture;
+                    }
+                });
+                mat.needsUpdate = true;
+            });
         }
 
-        // Adjust camera to fit target loaded FBX bounding box
-        function fitCameraToModel(model) {
-            const box = new THREE.Box3().setFromObject(model);
-            const size = box.getSize(new THREE.Vector3());
-            const center = box.getCenter(new THREE.Vector3());
+        function setupGyroscope() {
+            // Check if iOS DeviceOrientation permissions are required
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                document.getElementById('gyro-permission-box').classList.remove('hidden');
+            }
 
-            // Center model on floor level (Y=0)
-            model.position.x -= center.x;
-            model.position.y -= box.min.y;
-            model.position.z -= center.z;
+            window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+        }
 
-            const maxDim = Math.max(size.x, size.y, size.z);
+        document.getElementById('btn-request-gyro').addEventListener('click', function() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            gyroPermissionGranted = true;
+                            document.getElementById('gyro-permission-box').classList.add('hidden');
+                            setGyroMode(true);
+                            showToast('Gyroscope enabled');
+                        } else {
+                            showToast('Gyroscope permission denied');
+                        }
+                    })
+                    .catch(console.error);
+            }
+        });
+
+        function handleDeviceOrientation(event) {
+            if (!event.alpha && !event.beta && !event.gamma) return;
+
+            deviceOrientation.alpha = event.alpha ? THREE.MathUtils.degToRad(event.alpha) : 0; // Z
+            deviceOrientation.beta = event.beta ? THREE.MathUtils.degToRad(event.beta) : 0;   // X'
+            deviceOrientation.gamma = event.gamma ? THREE.MathUtils.degToRad(event.gamma) : 0; // Y''
+
+            if (gyroMode) {
+                updateCameraFromGyro();
+            }
+        }
+
+        function updateCameraFromGyro() {
+            const alpha = deviceOrientation.alpha; 
+            const beta = deviceOrientation.beta;   
+            const gamma = deviceOrientation.gamma; 
+
+            const euler = new THREE.Euler();
+            // Standard Euler rotation order for device orientation
+            euler.set(beta, alpha, -gamma, 'YXZ');
             
-            // Reposition camera slightly back and eye height
-            const startDist = maxDim > 0 ? maxDim * 1.5 : 5;
-            camera.position.set(0, Math.max(size.y * 0.5, 1.6), startDist);
-            camera.lookAt(0, size.y * 0.5, 0);
+            targetQuaternion.setFromEuler(euler);
 
-            // Update camera Euler angle to match lookAt
-            cameraEuler.setFromQuaternion(camera.quaternion);
+            // Adjust orientation for screen landscape/portrait mode
+            const orient = window.orientation ? THREE.MathUtils.degToRad(window.orientation) : 0;
+            const qScreen = new THREE.Quaternion();
+            qScreen.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -orient);
+            targetQuaternion.multiply(qScreen);
+
+            // Camera orientation offset to look forward in 3D
+            const qWorld = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+            targetQuaternion.multiply(qWorld);
         }
 
-        function resetCameraView() {
-            if (currentModel) {
-                fitCameraToModel(currentModel);
+        function setGyroMode(enable) {
+            gyroMode = enable;
+            const touchBtn = document.getElementById('mode-touch-btn');
+            const gyroBtn = document.getElementById('mode-gyro-btn');
+
+            if (gyroMode) {
+                gyroBtn.className = "flex-1 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 bg-indigo-600 text-white shadow";
+                touchBtn.className = "flex-1 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200";
+                
+                orbitControls.enabled = false;
+                document.getElementById('status-text').innerText = "Mode: Smartphone Gyro Look";
+                showToast("Gyro Mode Active");
             } else {
-                camera.position.set(0, 1.6, 5);
-                camera.rotation.set(0, 0, 0);
-                cameraEuler.set(0, 0, 0, 'YXZ');
+                touchBtn.className = "flex-1 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 bg-indigo-600 text-white shadow";
+                gyroBtn.className = "flex-1 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200";
+                
+                orbitControls.enabled = true;
+                document.getElementById('status-text').innerText = "Mode: Touch / Orbit Controls";
+                showToast("Orbit Mode Active");
             }
         }
 
-        function showLoading(show, fileName = '') {
-            if (show) {
-                loadingText.textContent = `${fileName} を読み込み中...`;
-                loadingProgress.textContent = '0%';
-                loadingOverlay.classList.remove('hidden');
-            } else {
-                loadingOverlay.classList.add('hidden');
+        document.getElementById('mode-touch-btn').addEventListener('click', () => setGyroMode(false));
+        document.getElementById('mode-gyro-btn').addEventListener('click', () => {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function' && !gyroPermissionGranted) {
+                document.getElementById('gyro-permission-box').classList.remove('hidden');
             }
+            setGyroMode(true);
+        });
+
+        // Quick Settings Handlers
+        document.getElementById('slider-light').addEventListener('input', (e) => {
+            ambientLight.intensity = parseFloat(e.target.value) * 0.6;
+            dirLight.intensity = parseFloat(e.target.value);
+        });
+
+        document.getElementById('slider-fov').addEventListener('input', (e) => {
+            camera.fov = parseFloat(e.target.value);
+            camera.updateProjectionMatrix();
+        });
+
+        document.getElementById('chk-autorotate').addEventListener('change', (e) => {
+            orbitControls.autoRotate = e.target.checked;
+            orbitControls.autoRotateSpeed = 2.0;
+        });
+
+        document.getElementById('chk-wireframe').addEventListener('change', (e) => {
+            if (!currentFBX) return;
+            currentFBX.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const mats = Array.isArray(child.material) ? child.material : [child.material];
+                    mats.forEach(m => m.wireframe = e.target.checked);
+                }
+            });
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            camera.position.set(0, 2.5, 5);
+            orbitControls.target.set(0, 1, 0);
+            orbitControls.update();
+            showToast("View Reset");
+        });
+
+        // Toggle UI panel visibility
+        const panel = document.getElementById('settings-panel');
+        document.getElementById('btn-settings-toggle').addEventListener('click', () => {
+            panel.classList.toggle('translate-y-0');
+            panel.classList.toggle('translate-y-[120%]');
+            panel.classList.toggle('opacity-0');
+        });
+
+        // Fullscreen Toggle
+        document.getElementById('btn-fullscreen').addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    showToast(`Fullscreen error: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        });
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = msg;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => toast.classList.add('opacity-0'), 2500);
         }
 
         function onWindowResize() {
@@ -542,48 +545,20 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            const delta = clock.getDelta();
-
-            // Update Gyroscope camera rotation if active
-            if (isGyroActive && deviceControls) {
-                deviceControls.update();
-            }
-
-            // Directional Vectors calculation for FPS Movement
-            // Get camera looking direction vector
-            const forwardVector = new THREE.Vector3();
-            camera.getWorldDirection(forwardVector);
-
-            // Calculate movement vector along horizontal ground plane (XZ plane)
-            const forwardDirection = new THREE.Vector3(forwardVector.x, 0, forwardVector.z).normalize();
-            
-            // Right directional vector perpendicular to forward vector
-            const rightDirection = new THREE.Vector3();
-            rightDirection.crossVectors(forwardDirection, new THREE.Vector3(0, -1, 0)).negate().normalize();
-
-            // Movement distance calculation based on speed & delta time
-            const moveDistance = MOVE_SPEED * delta;
-
-            // Apply forward / backward directional movement
-            if (moveState.forward) {
-                camera.position.addScaledVector(forwardDirection, moveDistance);
-            }
-            if (moveState.backward) {
-                camera.position.addScaledVector(forwardDirection, -moveDistance);
-            }
-            if (moveState.left) {
-                camera.position.addScaledVector(rightDirection, -moveDistance);
-            }
-            if (moveState.right) {
-                camera.position.addScaledVector(rightDirection, moveDistance);
+            if (gyroMode) {
+                // Smooth interpolation (slerp) to prevent gyro sensor jitter
+                camera.quaternion.slerp(targetQuaternion, 0.1);
+            } else {
+                orbitControls.update();
             }
 
             renderer.render(scene, camera);
         }
 
-        // Initialize application after window load
-        window.onload = function () {
+        // Initialize Application on Window Load
+        window.onload = function() {
             initScene();
+            setupGyroscope();
             animate();
         };
     </script>
