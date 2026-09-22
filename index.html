@@ -270,6 +270,10 @@
                 <!-- Options Bar -->
                 <div class="flex justify-between items-center pt-1 text-xs text-slate-300">
                     <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="chk-show-target" class="rounded accent-indigo-500">
+                        <span>Show Target Point</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" id="chk-autorotate" class="rounded accent-indigo-500">
                         <span>Auto Rotate</span>
                     </label>
@@ -295,7 +299,8 @@
     <script>
         let scene, camera, renderer, orbitControls;
         let currentFBX = null;
-        
+        let targetMarker = null; // 👈 注視点マーカー用の変数を追加
+
         // 🎬 アニメーション制御用の変数＆クロック追加！
         let mixer = null;
         const clock = new THREE.Clock();
@@ -383,6 +388,9 @@
             // Default fallback object
             createDefaultModel();
 
+            // 注視点マーカーの生成
+            createTargetMarker();
+
             // Setup movement controls
             setupMovementControls();
 
@@ -394,7 +402,31 @@
 
             // Resize handling
             window.addEventListener('resize', onWindowResize);
+
         }
+        
+        /* 注視点を示す球体の作成 */
+        function createTargetMarker() {
+            // 直径0.15程度の小さな赤い半透明の球体
+            const geometry = new THREE.SphereGeometry(0.12, 16, 16);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0xff3366,
+                wireframe: true, // ワイヤーフレームにすると目立ちやすく邪魔になりにくい
+                transparent: true,
+                opacity: 0.8
+            });
+            targetMarker = new THREE.Mesh(geometry, material);
+            targetMarker.visible = false; // 初期状態は非表示
+            scene.add(targetMarker);
+        }
+
+        document.getElementById('chk-show-target').addEventListener('change', (e) => {
+            if (targetMarker) {
+                targetMarker.visible = e.target.checked;
+                showToast(e.target.checked ? "Target Marker Shown" : "Target Marker Hidden");
+            }
+        });
+
 
         /* 🧭 コンパスUI要素の生成 */
         function initCompassUI() {
@@ -888,6 +920,11 @@
                 orbitControls.update();
             }
 
+            // 🎯 注視点マーカーの位置を最新の target に更新！
+            if (targetMarker && orbitControls) {
+                targetMarker.position.copy(orbitControls.target);
+            }
+            
             // 🧭 毎フレームコンパスバーの位置をカメラの向きに合わせて更新！
             updateCompass();
 
