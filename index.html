@@ -46,7 +46,7 @@
         /* 🧭 コンパスバーのスタイル設定 */
         .compass-wrapper {
             position: absolute;
-            top: 1rem;
+            bottom: 1.5rem;
             left: 50%;
             transform: translateX(-50%);
             width: 280px;
@@ -54,7 +54,7 @@
             overflow: hidden;
             border-radius: 9999px;
             pointer-events: none;
-            z-index: 15;
+            z-index: 5;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
         }
         .compass-track {
@@ -402,8 +402,8 @@
             track.innerHTML = '';
 
             const cardinalDirections = {
-                0: 'S', 45: 'SE', 90: 'E', 135: 'NE',
-                180: 'N', 225: 'NW', 270: 'W', 315: 'SW', 360: 'S'
+                0: 'S', 45: 'SW', 90: 'W', 135: 'NW',
+                180: 'N', 225: 'NE', 270: 'E', 315: 'SE', 360: 'S'
             };
 
             // スムーズな無限スクロールのために -180度から 540度まで生成
@@ -443,7 +443,7 @@
             if (headingDeg < 0) headingDeg += 360;
 
             // コンパスのトラックの位置を移動（-50% をベースに移動量を計算）
-            const offsetPx = -headingDeg * PIXELS_PER_DEGREE;
+            const offsetPx = headingDeg * PIXELS_PER_DEGREE;
             track.style.transform = `translateX(calc(-50% + ${offsetPx}px))`;
         }
 
